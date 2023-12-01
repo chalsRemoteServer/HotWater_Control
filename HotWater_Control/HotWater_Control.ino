@@ -16,6 +16,7 @@
 #define BOBINA_SOLENOIDE_GAS_LED 12//Solenoide que abre la llave de gas
 #define SWITCH_ENERGIA_PRINC_LED 11//switch que activa la chispa alto voltaje para que encienda el gas
 #define SWITCH_RESIST_HOTWAT_LED 10//Resistencia que calienta la agua en la regadera
+#define POWER_CONTROL_LED         9//Controla la base del MOSFET que alimenta los transistores que activan los reles
 
 volatile boolean timer1_out = HIGH;
 volatile boolean timer2_out = HIGH;
