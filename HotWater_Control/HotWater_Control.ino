@@ -11,7 +11,7 @@
 |   1    |    1   |    0   |  External clock source no T1 pin.  |
 |   1    |    1   |    1   |  External clock source no T1 pin.  |
 */
-
+#define version "0.1.5"
 #define TIMER1_LED  13
 #define BOBINA_SOLENOIDE_GAS_LED 12//Solenoide que abre la llave de gas
 #define SWITCH_ENERGIA_PRINC_LED 11//switch que activa la chispa alto voltaje para que encienda el gas
@@ -52,9 +52,11 @@ void setup() {
   pinMode(BOBINA_SOLENOIDE_GAS_LED,OUTPUT);
   pinMode(SWITCH_RESIST_HOTWAT_LED,OUTPUT);
   pinMode(SWITCH_ENERGIA_PRINC_LED,OUTPUT);
+  pinMode(POWER_CONTROL_LED,OUTPUT);
   delay(3000);
   setupTimer();
   setTimer1(3);
+  digitalWrite(POWER_CONTROL_LED,1);//se activan los reles.
 }//fin setup---------------------------------
 
 void loop() {
