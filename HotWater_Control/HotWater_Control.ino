@@ -11,25 +11,52 @@
 |   1    |    1   |    0   |  External clock source no T1 pin.  |
 |   1    |    1   |    1   |  External clock source no T1 pin.  |
 */
-
+#define version "0.1.5"
 #define TIMER1_LED  13
-
+#define BOBINA_SOLENOIDE_GAS_LED 12//Solenoide que abre la llave de gas
+#define SWITCH_ENERGIA_PRINC_LED 11//switch que activa la chispa alto voltaje para que encienda el gas
+#define SWITCH_RESIST_HOTWAT_LED 10//Resistencia que calienta la agua en la regadera
+#define POWER_CONTROL_LED         9//Controla la base del MOSFET que alimenta los transistores que activan los reles
 
 volatile boolean timer1_out = HIGH;
+volatile boolean timer2_out = HIGH;
+volatile boolean timer3_out = HIGH;
+volatile boolean timer4_out = HIGH;
 
 
-// Timer1 interrupt
+unsigned char count1,count2,count3;
+
+
+// Timer1 interrupt-----------------------------------------------
 ISR (TIMER1_COMPA_vect) {
   digitalWrite(TIMER1_LED, timer1_out);
   timer1_out = !timer1_out;
-}
+ 
+  if(++count1>2){count1=0;
+      digitalWrite(BOBINA_SOLENOIDE_GAS_LED,timer2_out);
+      timer2_out=!timer2_out;}
+
+  if(++count2>3){count2=0;
+      digitalWrite(SWITCH_ENERGIA_PRINC_LED,timer3_out);
+      timer3_out=!timer3_out;}
+
+  if(++count3>4){count3=0;
+      digitalWrite(SWITCH_RESIST_HOTWAT_LED,timer4_out);
+      timer4_out=!timer4_out;}
+  
+}//fin de insterrupcion del timer1-----------------------------
 
 
 void setup() {
   pinMode(TIMER1_LED, OUTPUT);
+  pinMode(BOBINA_SOLENOIDE_GAS_LED,OUTPUT);
+  pinMode(SWITCH_RESIST_HOTWAT_LED,OUTPUT);
+  pinMode(SWITCH_ENERGIA_PRINC_LED,OUTPUT);
+  pinMode(POWER_CONTROL_LED,OUTPUT);
   delay(3000);
   setupTimer();
   setTimer1(3);
+  digitalWrite(POWER_CONTROL_LED,1);//se activan los reles.
 }//fin setup---------------------------------
 
 void loop() {
