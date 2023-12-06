@@ -11,7 +11,7 @@
 |   1    |    1   |    0   |  External clock source no T1 pin.  |
 |   1    |    1   |    1   |  External clock source no T1 pin.  |
 */
-#define version "0.1.10"
+#define version "0.1.11"
 #define TIMER1_LED  13
 #define BOBINA_SOLENOIDE_GAS_LED 12//Solenoide que abre la llave de gas
 #define SWITCH_ENERGIA_PRINC_LED 11//switch que activa la chispa alto voltaje para que encienda el gas
@@ -21,6 +21,9 @@
 #define ON  1
 #define OFF 0
 
+#define INT0 0 //pin(2) en Nano-Arduino
+#define INT1 1 //pin(3) en Nano-Arduino
+
 volatile boolean timer1_out = HIGH;
 volatile boolean timer2_out = HIGH;
 volatile boolean timer3_out = HIGH;
@@ -28,7 +31,8 @@ volatile boolean timer4_out = HIGH;
 
 
 unsigned char count1,count2,count3,estado;
-unsigned char MonTemp; //cuenta el tiempo de monitoreo de espera de interrupcion de temperatura
+unsigned char MonTemp,AlarmaTemp=0; //cuenta el tiempo de monitoreo de espera de interrupcion de temperatura
+
 
 struct _Control_Salida{
   int time1;//en cuando dura el estado deseado
@@ -66,7 +70,7 @@ void setup() {
   digitalWrite(SWITCH_RESIST_HOTWAT_LED,0);
   digitalWrite(SWITCH_ENERGIA_PRINC_LED,0);
   digitalWrite(POWER_CONTROL_LED,0);//Encender Fuente de Reles
-   
+  attachInterrupt(INT0,IRQ_INT0_EXTERNA,RISING); 
 
   digitalWrite(POWER_CONTROL_LED,1);//Al fin de todo Encender Fuente de Reles
 }//fin setup---------------------------------
@@ -82,6 +86,16 @@ void loop() {
     default:estado=1;break;}//fin de switch loop
 }//fin loop---------------------------------------------------------
 
+/* interrupcion externa INT0 pin-2 en nano-arduino* 
+  recibe la señal del relevador de alarma de temperatura para
+  indicar que el boiler encendio y calienta */
+void IRQ_INT0_EXTERNA(){
+    AlarmaTemp=1; 
+
+}//fin de interrupcion externa INT0 PIN2  ++++++++++++++++++++++++++++
+
+
+
 /* funcion que  monitorea la interrupcion de alarma de temperatura,
    activa la interrupcion se desactiva la bobina
    de gas y se enciende la chipa durante 1 segundo 3 veces,
@@ -93,9 +107,12 @@ unsigned char ret=0;
 static unsigned char estado;
 const unsigned char TIEMPO_DE_ESPERA_SENSOR=9;//3 SEGUNDOS
    switch(estado){
-     case 1:MonTemp=TIEMPO_DE_ESPERA_SENSOR;estado++;break;
-     case 2:
-     case 3:
+     case 1:MonTemp=TIEMPO_DE_ESPERA_SENSOR;AlarmaTemp=0;
+            estado++;break;
+     case 2:if(AlarmaTemp){estado=20;}else{estado++;}break;
+     case 3:Bobina_de_Gas(OFF);estado++;break;
+     case 4:if(Switch_de_Alto_Voltaje(ON,1))estado++;break;
+     case 5:
      default:estado=1;break;}//fin switch++++++++++   
 return ret;  
 }//-fin de monitor de temperatura..................................
