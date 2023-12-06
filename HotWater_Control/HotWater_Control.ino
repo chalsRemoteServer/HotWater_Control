@@ -95,11 +95,12 @@ return 1;
 unsigned char Bobina_de_Gas(int estado){
 static unsigned char state,v;//
 unsigned char ret=0;
-  switch(state){
-    case 1:digitalWrite(BOBINA_SOLENOIDE_GAS_LED,ON);state++;break;
-    case 2:if(Lectura_de_Corriente_de_Bobina_de_Gas(&v));state++break;
-    case 3:if(v) ret=1; else ret=0;state++;break;
-    default:state=1;break;}///fin switch
+  if(estado==0){digitalWrite(BOBINA_SOLENOIDE_GAS_LED,OFF);ret=1;}
+  else{switch(state){
+          case 1:digitalWrite(BOBINA_SOLENOIDE_GAS_LED,ON);state++;break;
+          case 2:if(Lectura_de_Corriente_de_Bobina_de_Gas(&v));state++break;
+          case 3:if(v) ret=1; else ret=0;state++;break;
+          default:state=1;break;}}///fin switch
 
 return ret;  
 }//fin de encender la bobina de gas LP-----------------------------------
