@@ -11,7 +11,7 @@
 |   1    |    1   |    0   |  External clock source no T1 pin.  |
 |   1    |    1   |    1   |  External clock source no T1 pin.  |
 */
-#define version "0.1.9"
+#define version "0.1.10"
 #define TIMER1_LED  13
 #define BOBINA_SOLENOIDE_GAS_LED 12//Solenoide que abre la llave de gas
 #define SWITCH_ENERGIA_PRINC_LED 11//switch que activa la chispa alto voltaje para que encienda el gas
@@ -28,6 +28,8 @@ volatile boolean timer4_out = HIGH;
 
 
 unsigned char count1,count2,count3,estado;
+unsigned char MonTemp; //cuenta el tiempo de monitoreo de espera de interrupcion de temperatura
+
 struct _Control_Salida{
   int time1;//en cuando dura el estado deseado
   int state;//estado deseado.
@@ -42,6 +44,10 @@ ISR (TIMER1_COMPA_vect) {
   if(swHV.time1>0){
       if(--swHV.time1==0){
              digitalWrite(SWITCH_ENERGIA_PRINC_LED,!swHV.state);}}
+  
+  if(MonTemp>0){MonTemp--;}
+
+
 
   
 }//fin de insterrupcion del timer1-----------------------------
@@ -59,7 +65,10 @@ void setup() {
   digitalWrite(BOBINA_SOLENOIDE_GAS_LED,0);
   digitalWrite(SWITCH_RESIST_HOTWAT_LED,0);
   digitalWrite(SWITCH_ENERGIA_PRINC_LED,0);
-  digitalWrite(POWER_CONTROL_LED,1);//Encender Fuente de Reles
+  digitalWrite(POWER_CONTROL_LED,0);//Encender Fuente de Reles
+   
+
+  digitalWrite(POWER_CONTROL_LED,1);//Al fin de todo Encender Fuente de Reles
 }//fin setup---------------------------------
 
 void loop() {
@@ -74,16 +83,20 @@ void loop() {
 }//fin loop---------------------------------------------------------
 
 /* funcion que  monitorea la interrupcion de alarma de temperatura,
-   enciande la bobina de gas y espera durante 3 segundos 
-   si en 3 segundos no se activa la interrupcion se desactiva la bobina
+   activa la interrupcion se desactiva la bobina
    de gas y se enciende la chipa durante 1 segundo 3 veces,
    y se enciende la bobina de gas, si no se detecta la interrupcion
    se enciende la alarma del Falta de Gas, y se apaga la bobina
    si se detecta la  interrupcion, se sale del subprograma exitosamente*/
 unsigned char Monitor_Temperatura(void){
 unsigned char ret=0;
-
-  
+static unsigned char estado;
+const unsigned char TIEMPO_DE_ESPERA_SENSOR=9;//3 SEGUNDOS
+   switch(estado){
+     case 1:MonTemp=TIEMPO_DE_ESPERA_SENSOR;estado++;break;
+     case 2:
+     case 3:
+     default:estado=1;break;}//fin switch++++++++++   
 return ret;  
 }//-fin de monitor de temperatura..................................
 
