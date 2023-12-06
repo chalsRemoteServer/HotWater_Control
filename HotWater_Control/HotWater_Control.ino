@@ -11,7 +11,7 @@
 |   1    |    1   |    0   |  External clock source no T1 pin.  |
 |   1    |    1   |    1   |  External clock source no T1 pin.  |
 */
-#define version "0.1.8"
+#define version "0.1.9"
 #define TIMER1_LED  13
 #define BOBINA_SOLENOIDE_GAS_LED 12//Solenoide que abre la llave de gas
 #define SWITCH_ENERGIA_PRINC_LED 11//switch que activa la chispa alto voltaje para que encienda el gas
@@ -72,6 +72,21 @@ void loop() {
     case 6:break;//estado de Error
     default:estado=1;break;}//fin de switch loop
 }//fin loop---------------------------------------------------------
+
+/* funcion que  monitorea la interrupcion de alarma de temperatura,
+   enciande la bobina de gas y espera durante 3 segundos 
+   si en 3 segundos no se activa la interrupcion se desactiva la bobina
+   de gas y se enciende la chipa durante 1 segundo 3 veces,
+   y se enciende la bobina de gas, si no se detecta la interrupcion
+   se enciende la alarma del Falta de Gas, y se apaga la bobina
+   si se detecta la  interrupcion, se sale del subprograma exitosamente*/
+unsigned char Monitor_Temperatura(void){
+unsigned char ret=0;
+
+  
+return ret;  
+}//-fin de monitor de temperatura..................................
+
 
 //Enciende o apaga el control de alto voltaje de la chispa durante
 //el tiempo que se indique, time1=0 es infinito.
