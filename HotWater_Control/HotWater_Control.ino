@@ -11,7 +11,7 @@
 |   1    |    1   |    0   |  External clock source no T1 pin.  |
 |   1    |    1   |    1   |  External clock source no T1 pin.  |
 */
-#define version "0.1.11"
+#define version "0.1.12"
 #define TIMER1_LED  13
 #define BOBINA_SOLENOIDE_GAS_LED 12//Solenoide que abre la llave de gas
 #define SWITCH_ENERGIA_PRINC_LED 11//switch que activa la chispa alto voltaje para que encienda el gas
@@ -32,7 +32,7 @@ volatile boolean timer4_out = HIGH;
 
 unsigned char count1,count2,count3,estado;
 unsigned char MonTemp,AlarmaTemp=0; //cuenta el tiempo de monitoreo de espera de interrupcion de temperatura
-
+unsigned char vecesEncendido;
 
 struct _Control_Salida{
   int time1;//en cuando dura el estado deseado
@@ -105,14 +105,20 @@ void IRQ_INT0_EXTERNA(){
 unsigned char Monitor_Temperatura(void){
 unsigned char ret=0;
 static unsigned char estado;
-const unsigned char TIEMPO_DE_ESPERA_SENSOR=9;//3 SEGUNDOS
+const unsigned char TIEMPO_DE_ESPERA_SENSOR=12;//3 SEGUNDOS
    switch(estado){
      case 1:MonTemp=TIEMPO_DE_ESPERA_SENSOR;AlarmaTemp=0;
             estado++;break;
      case 2:if(AlarmaTemp){estado=20;}else{estado++;}break;
-     case 3:Bobina_de_Gas(OFF);estado++;break;
+     case 3:Bobina_de_Gas(OFF);MonTemp=4;vecesEncendido=3;
+            estado++;break;
      case 4:if(Switch_de_Alto_Voltaje(ON,1))estado++;break;
-     case 5:
+     case 5:if(AlarmaTemp){estado=20;}
+            else{if(MonTemp==0){
+                    if(vecesEncendido>0){vecesEncendido--;
+                    else{}}}
+                 else{estado=4;}}   
+            
      default:estado=1;break;}//fin switch++++++++++   
 return ret;  
 }//-fin de monitor de temperatura..................................
