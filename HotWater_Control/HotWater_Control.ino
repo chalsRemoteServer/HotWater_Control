@@ -11,18 +11,28 @@
 |   1    |    1   |    0   |  External clock source no T1 pin.  |
 |   1    |    1   |    1   |  External clock source no T1 pin.  |
 */
-#define version "0.1.12"
+#define version "0.1.13"
 #define TIMER1_LED  13
 #define BOBINA_SOLENOIDE_GAS_LED 12//Solenoide que abre la llave de gas
 #define SWITCH_ENERGIA_PRINC_LED 11//switch que activa la chispa alto voltaje para que encienda el gas
 #define SWITCH_RESIST_HOTWAT_LED 10//Resistencia que calienta la agua en la regadera
 #define POWER_CONTROL_LED         9//Controla la base del MOSFET que alimenta los transistores que activan los reles
+#define ALARMA_FALTA_GAS_LED      8
+#define ALARMA_BOBINA_FALLA_LED   7
+#define ALARMA_SOBREVOLTAJE_LED   6
+#define ALARMA_RESIST_REGAD_LED   5
 
 #define ON  1
 #define OFF 0
 
 #define INT0 0 //pin(2) en Nano-Arduino
 #define INT1 1 //pin(3) en Nano-Arduino
+
+#define ALARMA_FALTA_GAS    0x01
+#define ALARMA_BOBINA_FALLA 0x02
+#define ALARMA_SOBREVOLTAJE 0x04
+#define ALARMA_RESIST_REGAD 0x08
+
 
 volatile boolean timer1_out = HIGH;
 volatile boolean timer2_out = HIGH;
@@ -31,8 +41,9 @@ volatile boolean timer4_out = HIGH;
 
 
 unsigned char count1,count2,count3,estado;
-unsigned char MonTemp,AlarmaTemp=0; //cuenta el tiempo de monitoreo de espera de interrupcion de temperatura
+unsigned char DiscountTime,AlarmaTemp=0; //cuenta el tiempo de monitoreo de espera de interrupcion de temperatura
 unsigned char vecesEncendido;
+unsigned char AlarmaStatus;//guarda las alarmas que hay activadas
 
 struct _Control_Salida{
   int time1;//en cuando dura el estado deseado
@@ -49,7 +60,7 @@ ISR (TIMER1_COMPA_vect) {
       if(--swHV.time1==0){
              digitalWrite(SWITCH_ENERGIA_PRINC_LED,!swHV.state);}}
   
-  if(MonTemp>0){MonTemp--;}
+  if(DiscountTime>0){DiscountTime--;}
 
 
 
@@ -63,12 +74,22 @@ void setup() {
   pinMode(SWITCH_RESIST_HOTWAT_LED,OUTPUT);
   pinMode(SWITCH_ENERGIA_PRINC_LED,OUTPUT);
   pinMode(POWER_CONTROL_LED,OUTPUT);
+  pinMode(ALARMA_FALTA_GAS_LED,OUTPUT);
+  pinMode(ALARMA_BOBINA_FALLA_LED,OUTPUT);
+  pinMode(ALARMA_SOBREVOLTAJE_LED,OUTPUT);
+  pinMode(ALARMA_RESIST_REGAD_LED,OUTPUT);
+
   delay(3000);
   setupTimer();
   setTimer1(3);
   digitalWrite(BOBINA_SOLENOIDE_GAS_LED,0);
   digitalWrite(SWITCH_RESIST_HOTWAT_LED,0);
   digitalWrite(SWITCH_ENERGIA_PRINC_LED,0);
+  digitalWrite(ALARMA_FALTA_GAS_LED,0);
+  digitalWrite(ALARMA_BOBINA_FALLA_LED,0);
+  digitalWrite(ALARMA_SOBREVOLTAJE_LED,0);
+  digitalWrite(ALARMA_RESIST_REGAD_LED,0);
+  
   digitalWrite(POWER_CONTROL_LED,0);//Encender Fuente de Reles
   attachInterrupt(INT0,IRQ_INT0_EXTERNA,RISING); 
 
@@ -78,11 +99,12 @@ void setup() {
 void loop() {
   switch(estado){
     case 1:if(Switch_de_Alto_Voltaje(ON,3))estado++;break; //3 segundos
-    case 2:if(Bobina_de_Gas(ON))estado++;break;//encender Bobina de Gas
-    case 3:if(Monitor_Temperatura())estado++;break;//cuenta el tiempo que tarda en llegar la interrupcion del rele de temp.
-    case 4:Ventilador(ON);estado++;break;
-    case 5:if(Monitor_Temperatura2())estado++;break;
-    case 6:break;//estado de Error
+    case 2:if(Bobina_de_Gas(ON)){DiscountTime=12;estado++;}break;//encender Bobina de Gas
+    case 3:if(!DiscountTime) estado++;break;//delay
+    case 4:if(Monitor_Temperatura())estado++;break;//cuenta el tiempo que tarda en llegar la interrupcion del rele de temp.
+    case 5:Ventilador(ON);estado++;break;
+    case 6:if(Monitor_Temperatura2())estado++;break;
+    case 7:break;//estado de Error
     default:estado=1;break;}//fin de switch loop
 }//fin loop---------------------------------------------------------
 
@@ -106,23 +128,39 @@ unsigned char Monitor_Temperatura(void){
 unsigned char ret=0;
 static unsigned char estado;
 const unsigned char TIEMPO_DE_ESPERA_SENSOR=12;//3 SEGUNDOS
+const unsigned char TIME_WAIT=4;//tiempo de encendido chispa
    switch(estado){
-     case 1:MonTemp=TIEMPO_DE_ESPERA_SENSOR;AlarmaTemp=0;
+     case 1:DiscountTime=TIEMPO_DE_ESPERA_SENSOR;AlarmaTemp=0;
             estado++;break;
      case 2:if(AlarmaTemp){estado=20;}else{estado++;}break;
-     case 3:Bobina_de_Gas(OFF);MonTemp=4;vecesEncendido=3;
-            estado++;break;
-     case 4:if(Switch_de_Alto_Voltaje(ON,1))estado++;break;
-     case 5:if(AlarmaTemp){estado=20;}
-            else{if(MonTemp==0){
+     case 3:DiscountTime=TIME_WAIT;
+            vecesEncendido=3;estado++;break;
+     case 4:estado++;break;//encender Bobina de Gas
+     case 5:if(Switch_de_Alto_Voltaje(ON,1))estado++;break;
+     case 6:if(AlarmaTemp){estado=20;}
+            else{if(DiscountTime==0){
                     if(vecesEncendido>0){vecesEncendido--;
-                    else{}}}
-                 else{estado=4;}}   
-            
+                                   DiscountTime=TIME_WAIT;
+                                  estado=5;}
+                    else{estado++;}}
+                 else{estado=6;}} 
+            break;       
+     case 7:Bobina_de_Gas(OFF);estado++;break;
+     case 8:if(Encender_Alarma(ALARMA_FALTA_GAS))estado=20;break;
+     case 20:ret=1;estado++;break;
      default:estado=1;break;}//fin switch++++++++++   
 return ret;  
 }//-fin de monitor de temperatura..................................
 
+
+unsigned char Encender_Alarma(unsigned char alarma){
+unsigned char ret=0;
+   switch(alarma){
+     case ALARMA_FALTA_GAS:digitalWrite(ALARMA_FALTA_GAS_LED,ON);break;
+     case ALARMA_BOBINA_FALLA:digitalWrite(ALARMA_BOBINA_FALLA_LED,ON);break;
+     case ALARMA_SOBREVOLTAJE:digitalWrite(ALARMA_SOBREVOLTAJE_LED,ON);break;
+     default:ret=1;break;}
+}//fin de encender Alarmar------------------------------
 
 //Enciende o apaga el control de alto voltaje de la chispa durante
 //el tiempo que se indique, time1=0 es infinito.
