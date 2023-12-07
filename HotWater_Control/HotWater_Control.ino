@@ -21,6 +21,12 @@
 #define ALARMA_BOBINA_FALLA_LED   7
 #define ALARMA_SOBREVOLTAJE_LED   6
 #define ALARMA_RESIST_REGAD_LED   5
+#define VENTILADOR_LED            4
+#define SENS_CORRIENTE_BOBINA     A1
+#define SENS_CORRIENTE_RESIST     A2
+
+#define MAXIMO_CORRIENTE_BOBINA   200  
+#define MAXIMO_CORRIENTE_RESIST   1000
 
 #define ON  1
 #define OFF 0
@@ -78,6 +84,7 @@ void setup() {
   pinMode(ALARMA_BOBINA_FALLA_LED,OUTPUT);
   pinMode(ALARMA_SOBREVOLTAJE_LED,OUTPUT);
   pinMode(ALARMA_RESIST_REGAD_LED,OUTPUT);
+  pinMode(VENTILADOR_LED,OUTPUT);
 
   delay(3000);
   setupTimer();
@@ -89,6 +96,8 @@ void setup() {
   digitalWrite(ALARMA_BOBINA_FALLA_LED,0);
   digitalWrite(ALARMA_SOBREVOLTAJE_LED,0);
   digitalWrite(ALARMA_RESIST_REGAD_LED,0);
+  digitalWrite(VENTILADOR_LED,0);
+  
   
   digitalWrite(POWER_CONTROL_LED,0);//Encender Fuente de Reles
   attachInterrupt(INT0,IRQ_INT0_EXTERNA,RISING); 
@@ -102,9 +111,11 @@ void loop() {
     case 2:if(Bobina_de_Gas(ON)){DiscountTime=12;estado++;}break;//encender Bobina de Gas
     case 3:if(!DiscountTime) estado++;break;//delay
     case 4:if(Monitor_Temperatura())estado++;break;//cuenta el tiempo que tarda en llegar la interrupcion del rele de temp.
-    case 5:Ventilador(ON);estado++;break;
-    case 6:if(Monitor_Temperatura2())estado++;break;
-    case 7:break;//estado de Error
+    case 5:if(!(AlarmaStatus&0x07)){Ventilador(ON);}estado++;break;        
+    case 6:if(Resistencia_Regadera(ON))estado++;break;
+    case 7:if(!(AlarmaStatus&0x07)) estado++;break;
+    case 8:if(Monitor_Temperatura2())estado++;break;
+    case 9:break;//estado de Error
     default:estado=1;break;}//fin de switch loop
 }//fin loop---------------------------------------------------------
 
@@ -113,8 +124,74 @@ void loop() {
   indicar que el boiler encendio y calienta */
 void IRQ_INT0_EXTERNA(){
     AlarmaTemp=1; 
-
 }//fin de interrupcion externa INT0 PIN2  ++++++++++++++++++++++++++++
+
+
+void Ventilador(unsigned char estado){
+ switch(estado){
+  case 0: 
+  case 1:digitalWrite(VENTILADOR_LED,estado);break;
+  default:break;}
+}//fin de ventilador++++++++++++++++++++++++++++++++++++
+
+unsigned char  Resistencia_Regadera(unsigned char estado){
+static unsigned char state,v;
+unsigned char ret=0;
+ if(!estado){digitalWrite(SWITCH_RESIST_HOTWAT_LED,OFF);ret=1;}
+ else{switch(state){
+          case 1:digitalWrite(SWITCH_RESIST_HOTWAT_LED,ON);state++;break; 
+          case 2:if(Lectura_de_Corriente_de_Resist_Reg(&v));state++;break;
+          case 3:if(v) ret=1;else{ret=0;}state++;break;
+          default:state=1;break;}}
+return ret;
+}//fin de ventilador++++++++++++++++++++++++++++++++++++
+
+unsigned char Lectura_de_Corriente_de_Resist_Reg(unsigned char *v){
+unsigned char ret=0;
+ if((analogRead(SENS_CORRIENTE_BOBINA)>MAXIMO_CORRIENTE_BOBINA){
+        ret=1;}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+ else{Encender_Alarma(ALARMA_BOBINA_FALLA);}
+return ret;       
+}//fin de leer corriente de ressistencia 
+
+Lectura_de_Corriente_de_Bobina_de_Gas
+
+
+
+
+
+unsigned char Encender_Alarma(unsigned char alarma){
+unsigned char ret=0;  
+   switch(alarma){
+     case ALARMA_FALTA_GAS:AlarmaStatus|=alarma;
+              digitalWrite(ALARMA_FALTA_GAS_LED,ON);break;
+     case ALARMA_BOBINA_FALLA:AlarmaStatus|=alarma;
+              digitalWrite(ALARMA_BOBINA_FALLA_LED,ON);break;
+     case ALARMA_SOBREVOLTAJE:AlarmaStatus|=alarma;
+              digitalWrite(POWER_CONTROL_LED,OFF);//Al fin de todo Encender Fuente de Reles
+              digitalWrite(ALARMA_SOBREVOLTAJE_LED,ON);break;
+     case ALARMA_RESIST_REGAD:AlarmaStatus|=alarma;
+              digitalWrite(ALARMA_RESIST_REGAD_LED,ON);break;
+     default:ret=1;break;}
+}//fin de encender Alarmar------------------------------
+
+
+//enciende la Bobina de GAS y monitorea la corriente
+//que comprueba que haya bobina
+/* Si la lectura de la corriente de la bobina de Gas no es
+   buena se activa una Alarma de error un LEd y un Buzzer */
+unsigned char Bobina_de_Gas(int estado){
+static unsigned char state,v;//
+unsigned char ret=0;
+  if(estado==0){digitalWrite(BOBINA_SOLENOIDE_GAS_LED,OFF);ret=1;}
+  else{switch(state){
+          case 1:digitalWrite(BOBINA_SOLENOIDE_GAS_LED,ON);state++;break;
+          case 2:if(Lectura_de_Corriente_de_Bobina_de_Gas(&v));state++break;
+          case 3:if(v) ret=1; else ret=0;state++;break;
+          default:state=1;break;}}///fin switch
+
+return ret;  
+}//fin de encender la bobina de gas LP-----------------------------------
 
 
 
@@ -153,15 +230,6 @@ return ret;
 }//-fin de monitor de temperatura..................................
 
 
-unsigned char Encender_Alarma(unsigned char alarma){
-unsigned char ret=0;
-   switch(alarma){
-     case ALARMA_FALTA_GAS:digitalWrite(ALARMA_FALTA_GAS_LED,ON);break;
-     case ALARMA_BOBINA_FALLA:digitalWrite(ALARMA_BOBINA_FALLA_LED,ON);break;
-     case ALARMA_SOBREVOLTAJE:digitalWrite(ALARMA_SOBREVOLTAJE_LED,ON);break;
-     default:ret=1;break;}
-}//fin de encender Alarmar------------------------------
-
 //Enciende o apaga el control de alto voltaje de la chispa durante
 //el tiempo que se indique, time1=0 es infinito.
 //state: ON||OFF
@@ -176,23 +244,6 @@ else{swHV.time1=0;}
 return 1;
 }//fin de encender o apagar el apto voltaje-----------------------------
 
-
-//enciende la Bobina de GAS y monitorea la corriente
-//que comprueba que haya bobina
-/* Si la lectura de la corriente de la bobina de Gas no es
-   buena se activa una Alarma de error un LEd y un Buzzer */
-unsigned char Bobina_de_Gas(int estado){
-static unsigned char state,v;//
-unsigned char ret=0;
-  if(estado==0){digitalWrite(BOBINA_SOLENOIDE_GAS_LED,OFF);ret=1;}
-  else{switch(state){
-          case 1:digitalWrite(BOBINA_SOLENOIDE_GAS_LED,ON);state++;break;
-          case 2:if(Lectura_de_Corriente_de_Bobina_de_Gas(&v));state++break;
-          case 3:if(v) ret=1; else ret=0;state++;break;
-          default:state=1;break;}}///fin switch
-
-return ret;  
-}//fin de encender la bobina de gas LP-----------------------------------
 
 
 
