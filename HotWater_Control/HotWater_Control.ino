@@ -11,7 +11,7 @@
 |   1    |    1   |    0   |  External clock source no T1 pin.  |
 |   1    |    1   |    1   |  External clock source no T1 pin.  |
 */
-#define version "0.1.13"
+#define version "0.1.14"
 #define TIMER1_LED  13
 #define BOBINA_SOLENOIDE_GAS_LED 12//Solenoide que abre la llave de gas
 #define SWITCH_ENERGIA_PRINC_LED 11//switch que activa la chispa alto voltaje para que encienda el gas
@@ -22,8 +22,8 @@
 #define ALARMA_SOBREVOLTAJE_LED   6
 #define ALARMA_RESIST_REGAD_LED   5
 #define VENTILADOR_LED            4
-#define SENS_CORRIENTE_BOBINA     A1
-#define SENS_CORRIENTE_RESIST     A2
+#define SENS_CORRIENTE_BOBINA_IN  A1
+#define SENS_CORRIENTE_RESIST_IN  A2
 
 #define MAXIMO_CORRIENTE_BOBINA   200  
 #define MAXIMO_CORRIENTE_RESIST   1000
@@ -113,7 +113,7 @@ void loop() {
     case 4:if(Monitor_Temperatura())estado++;break;//cuenta el tiempo que tarda en llegar la interrupcion del rele de temp.
     case 5:if(!(AlarmaStatus&0x07)){Ventilador(ON);}estado++;break;        
     case 6:if(Resistencia_Regadera(ON))estado++;break;
-    case 7:if(!(AlarmaStatus&0x07)) estado++;break;
+    case 7:if(!(AlarmaStatus&0x07)) estado++;else estado=9;break;//NO HAY LA 3 PRIMERAS ALARMAS
     case 8:if(Monitor_Temperatura2())estado++;break;
     case 9:break;//estado de Error
     default:estado=1;break;}//fin de switch loop
@@ -135,26 +135,26 @@ void Ventilador(unsigned char estado){
 }//fin de ventilador++++++++++++++++++++++++++++++++++++
 
 unsigned char  Resistencia_Regadera(unsigned char estado){
-static unsigned char state,v;
+static unsigned char state;
 unsigned char ret=0;
  if(!estado){digitalWrite(SWITCH_RESIST_HOTWAT_LED,OFF);ret=1;}
  else{switch(state){
           case 1:digitalWrite(SWITCH_RESIST_HOTWAT_LED,ON);state++;break; 
-          case 2:if(Lectura_de_Corriente_de_Resist_Reg(&v));state++;break;
-          case 3:if(v) ret=1;else{ret=0;}state++;break;
+          case 2:Lectura_de_Corriente_de_Resist_Reg());state++;break;
+          case 3:ret=1;state++;break;
           default:state=1;break;}}
 return ret;
 }//fin de ventilador++++++++++++++++++++++++++++++++++++
 
-unsigned char Lectura_de_Corriente_de_Resist_Reg(unsigned char *v){
-unsigned char ret=0;
- if((analogRead(SENS_CORRIENTE_BOBINA)>MAXIMO_CORRIENTE_BOBINA){
-        ret=1;}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
- else{Encender_Alarma(ALARMA_BOBINA_FALLA);}
-return ret;       
+unsigned char Lectura_de_Corriente_de_Resist_Reg(void){
+ if((analogRead(SENS_CORRIENTE_BOBINA_IN)<MAXIMO_CORRIENTE_BOBINA){
+         Encender_Alarma(ALARMA_BOBINA_FALLA);}
 }//fin de leer corriente de ressistencia 
 
-Lectura_de_Corriente_de_Bobina_de_Gas
+unsigned char Lectura_de_Corriente_de_Bobina_de_Gas(void){
+ if((analogRead(SENS_CORRIENTE_BOBINA_IN)<MAXIMO_CORRIENTE_BOBINA){
+         Encender_Alarma(ALARMA_RESIST_REGAD);} 
+  }//fin de leeer la corriente de bobina de gas+++++++++++++
 
 
 
@@ -228,6 +228,46 @@ const unsigned char TIME_WAIT=4;//tiempo de encendido chispa
      default:estado=1;break;}//fin switch++++++++++   
 return ret;  
 }//-fin de monitor de temperatura..................................
+
+
+
+/* si llegamos hasta a qui es porque no hubo Alarmas de Gas
+ ni Sobrevoltaje, ni Alarma de Bobina Fallando. Por lo que 
+ esta Funcion Monitorea que no haya sobrevoltaje, que la Bobina
+   Funcione y que La temperatura no baje/ que la llama nose apague.*/
+unsigned char Monitor_Temperatura2(void){
+unsigned char ret=0;
+static unsigned char estado;
+const unsigned char TIEMPO_DE_ESPERA_SENSOR=12;//3 SEGUNDOS
+const unsigned char TIME_WAIT=4;//tiempo de encendido chispa
+   switch(estado){
+     case 1:DiscountTime=TIEMPO_DE_ESPERA_SENSOR;AlarmaTemp=0;
+            estado++;break;
+     case 2:if(AlarmaTemp){estado=20;}else{estado++;}break;
+     case 3:DiscountTime=TIME_WAIT;
+            vecesEncendido=3;estado++;break;
+     case 4:estado++;break;//encender Bobina de Gas
+     case 5:if(Switch_de_Alto_Voltaje(ON,1))estado++;break;
+     case 6:if(AlarmaTemp){estado=20;}
+            else{if(DiscountTime==0){
+                    if(vecesEncendido>0){vecesEncendido--;
+                                   DiscountTime=TIME_WAIT;
+                                  estado=5;}
+                    else{estado++;}}
+                 else{estado=6;}} 
+            break;       
+     case 7:Bobina_de_Gas(OFF);estado++;break;
+     case 8:if(Encender_Alarma(ALARMA_FALTA_GAS))estado=20;break;
+     case 20:ret=1;estado++;break;
+     default:estado=1;break;}//fin switch++++++++++   
+return ret;  
+}//-fin de monitor de temperatura..................................
+
+
+
+
+
+
 
 
 //Enciende o apaga el control de alto voltaje de la chispa durante
