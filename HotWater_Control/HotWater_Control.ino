@@ -11,7 +11,7 @@
 |   1    |    1   |    0   |  External clock source no T1 pin.  |
 |   1    |    1   |    1   |  External clock source no T1 pin.  |
 */
-#define version "0.1.14"
+#define version "0.1.15"
 #define TIMER1_LED  13
 #define BOBINA_SOLENOIDE_GAS_LED 12//Solenoide que abre la llave de gas
 #define SWITCH_ENERGIA_PRINC_LED 11//switch que activa la chispa alto voltaje para que encienda el gas
@@ -24,6 +24,7 @@
 #define VENTILADOR_LED            4
 #define SENS_CORRIENTE_BOBINA_IN  A1
 #define SENS_CORRIENTE_RESIST_IN  A2
+#define SENS_OPTICO_DE_LLAMA_IN   A3
 
 #define MAXIMO_CORRIENTE_BOBINA   200  
 #define MAXIMO_CORRIENTE_RESIST   1000
@@ -110,11 +111,11 @@ void loop() {
     case 1:if(Switch_de_Alto_Voltaje(ON,3))estado++;break; //3 segundos
     case 2:if(Bobina_de_Gas(ON)){DiscountTime=12;estado++;}break;//encender Bobina de Gas
     case 3:if(!DiscountTime) estado++;break;//delay
-    case 4:if(Monitor_Temperatura())estado++;break;//cuenta el tiempo que tarda en llegar la interrupcion del rele de temp.
+    case 4:if(Monitor_Temperatura_v2())estado++;break;//cuenta el tiempo que tarda en llegar la interrupcion del rele de temp.
     case 5:if(!(AlarmaStatus&0x07)){Ventilador(ON);}estado++;break;        
     case 6:if(Resistencia_Regadera(ON))estado++;break;
     case 7:if(!(AlarmaStatus&0x07)) estado++;else estado=9;break;//NO HAY LA 3 PRIMERAS ALARMAS
-    case 8:if(Monitor_Temperatura2())estado++;break;
+    case 8:if(Monitor_Temperatura2_v2())estado++;break;
     case 9:break;//estado de Error
     default:estado=1;break;}//fin de switch loop
 }//fin loop---------------------------------------------------------
@@ -140,19 +141,19 @@ unsigned char ret=0;
  if(!estado){digitalWrite(SWITCH_RESIST_HOTWAT_LED,OFF);ret=1;}
  else{switch(state){
           case 1:digitalWrite(SWITCH_RESIST_HOTWAT_LED,ON);state++;break; 
-          case 2:Lectura_de_Corriente_de_Resist_Reg());state++;break;
+          case 2:Lectura_de_Corriente_de_Resist_Reg();state++;break;
           case 3:ret=1;state++;break;
           default:state=1;break;}}
 return ret;
 }//fin de ventilador++++++++++++++++++++++++++++++++++++
 
 unsigned char Lectura_de_Corriente_de_Resist_Reg(void){
- if((analogRead(SENS_CORRIENTE_BOBINA_IN)<MAXIMO_CORRIENTE_BOBINA){
+ if(analogRead(SENS_CORRIENTE_BOBINA_IN)<MAXIMO_CORRIENTE_BOBINA){
          Encender_Alarma(ALARMA_BOBINA_FALLA);}
 }//fin de leer corriente de ressistencia 
 
 unsigned char Lectura_de_Corriente_de_Bobina_de_Gas(void){
- if((analogRead(SENS_CORRIENTE_BOBINA_IN)<MAXIMO_CORRIENTE_BOBINA){
+ if(analogRead(SENS_CORRIENTE_BOBINA_IN)<MAXIMO_CORRIENTE_BOBINA){
          Encender_Alarma(ALARMA_RESIST_REGAD);} 
   }//fin de leeer la corriente de bobina de gas+++++++++++++
 
@@ -160,8 +161,8 @@ unsigned char Lectura_de_Corriente_de_Bobina_de_Gas(void){
 
 
 
-unsigned char Encender_Alarma(unsigned char alarma){
-unsigned char ret=0;  
+void Encender_Alarma(unsigned char alarma){
+//unsigned char ret=0;  
    switch(alarma){
      case ALARMA_FALTA_GAS:AlarmaStatus|=alarma;
               digitalWrite(ALARMA_FALTA_GAS_LED,ON);break;
@@ -172,7 +173,7 @@ unsigned char ret=0;
               digitalWrite(ALARMA_SOBREVOLTAJE_LED,ON);break;
      case ALARMA_RESIST_REGAD:AlarmaStatus|=alarma;
               digitalWrite(ALARMA_RESIST_REGAD_LED,ON);break;
-     default:ret=1;break;}
+     default:break;}
 }//fin de encender Alarmar------------------------------
 
 
@@ -186,7 +187,7 @@ unsigned char ret=0;
   if(estado==0){digitalWrite(BOBINA_SOLENOIDE_GAS_LED,OFF);ret=1;}
   else{switch(state){
           case 1:digitalWrite(BOBINA_SOLENOIDE_GAS_LED,ON);state++;break;
-          case 2:if(Lectura_de_Corriente_de_Bobina_de_Gas(&v));state++break;
+          case 2:if(Lectura_de_Corriente_de_Bobina_de_Gas());state++;break;
           case 3:if(v) ret=1; else ret=0;state++;break;
           default:state=1;break;}}///fin switch
 
@@ -201,20 +202,22 @@ return ret;
    y se enciende la bobina de gas, si no se detecta la interrupcion
    se enciende la alarma del Falta de Gas, y se apaga la bobina
    si se detecta la  interrupcion, se sale del subprograma exitosamente*/
-unsigned char Monitor_Temperatura(void){
+unsigned char Monitor_Temperatura_v2(void){
 unsigned char ret=0;
 static unsigned char estado;
 const unsigned char TIEMPO_DE_ESPERA_SENSOR=12;//3 SEGUNDOS
 const unsigned char TIME_WAIT=4;//tiempo de encendido chispa
+const int UMBRAL_DETECCION_LUMBRE=1000;
    switch(estado){
      case 1:DiscountTime=TIEMPO_DE_ESPERA_SENSOR;AlarmaTemp=0;
             estado++;break;
-     case 2:if(AlarmaTemp){estado=20;}else{estado++;}break;
+     case 2:if(analogRead(SENS_OPTICO_DE_LLAMA_IN)>UMBRAL_DETECCION_LUMBRE){estado=20;}
+            else{estado++;}break;
      case 3:DiscountTime=TIME_WAIT;
             vecesEncendido=3;estado++;break;
      case 4:estado++;break;//encender Bobina de Gas
      case 5:if(Switch_de_Alto_Voltaje(ON,1))estado++;break;
-     case 6:if(AlarmaTemp){estado=20;}
+     case 6:if(analogRead(SENS_OPTICO_DE_LLAMA_IN)>UMBRAL_DETECCION_LUMBRE){estado=20;}
             else{if(DiscountTime==0){
                     if(vecesEncendido>0){vecesEncendido--;
                                    DiscountTime=TIME_WAIT;
@@ -223,7 +226,7 @@ const unsigned char TIME_WAIT=4;//tiempo de encendido chispa
                  else{estado=6;}} 
             break;       
      case 7:Bobina_de_Gas(OFF);estado++;break;
-     case 8:if(Encender_Alarma(ALARMA_FALTA_GAS))estado=20;break;
+     case 8:Encender_Alarma(ALARMA_FALTA_GAS);estado=20;break;
      case 20:ret=1;estado++;break;
      default:estado=1;break;}//fin switch++++++++++   
 return ret;  
@@ -235,16 +238,19 @@ return ret;
  ni Sobrevoltaje, ni Alarma de Bobina Fallando. Por lo que 
  esta Funcion Monitorea que no haya sobrevoltaje, que la Bobina
    Funcione y que La temperatura no baje/ que la llama nose apague.*/
-unsigned char Monitor_Temperatura2(void){
+unsigned char Monitor_Temperatura2_v2(void){
 unsigned char ret=0;
 static unsigned char estado;
 const unsigned char TIEMPO_DE_ESPERA_SENSOR=12;//3 SEGUNDOS
 const unsigned char TIME_WAIT=4;//tiempo de encendido chispa
+const int UMBRAL_DETECCION_LUMBRE=500;//Umbral de luz para detectar llama
    switch(estado){
      case 1:DiscountTime=TIEMPO_DE_ESPERA_SENSOR;AlarmaTemp=0;
             estado++;break;
-     case 2:if(AlarmaTemp){estado=20;}else{estado++;}break;
-     case 3:DiscountTime=TIME_WAIT;
+     case 2:if(analogRead(SENS_OPTICO_DE_LLAMA_IN)<UMBRAL_DETECCION_LUMBRE){
+                  Encender_Alarma(ALARMA_FALTA_GAS); }
+            estado++;break;
+     case 3:Lectura_de_Corriente_de_Bobina_de_Gas();
             vecesEncendido=3;estado++;break;
      case 4:estado++;break;//encender Bobina de Gas
      case 5:if(Switch_de_Alto_Voltaje(ON,1))estado++;break;
@@ -257,7 +263,7 @@ const unsigned char TIME_WAIT=4;//tiempo de encendido chispa
                  else{estado=6;}} 
             break;       
      case 7:Bobina_de_Gas(OFF);estado++;break;
-     case 8:if(Encender_Alarma(ALARMA_FALTA_GAS))estado=20;break;
+     case 8:Encender_Alarma(ALARMA_FALTA_GAS);estado=20;break;
      case 20:ret=1;estado++;break;
      default:estado=1;break;}//fin switch++++++++++   
 return ret;  
