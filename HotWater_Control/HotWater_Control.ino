@@ -11,7 +11,7 @@
 |   1    |    1   |    0   |  External clock source no T1 pin.  |
 |   1    |    1   |    1   |  External clock source no T1 pin.  |
 */
-#define version "0.1.15"
+#define version "0.1.17"
 #define TIMER1_LED  13
 #define BOBINA_SOLENOIDE_GAS_LED 12//Solenoide que abre la llave de gas
 #define SWITCH_ENERGIA_PRINC_LED 11//switch que activa la chispa alto voltaje para que encienda el gas
@@ -25,15 +25,16 @@
 #define SENS_CORRIENTE_BOBINA_IN  A1
 #define SENS_CORRIENTE_RESIST_IN  A2
 #define SENS_OPTICO_DE_LLAMA_IN   A3
+#define CAL_SENS_OPTICO_IN        A4//Calibracion sens. optico
+
+#define INT0 0 //pin(2) en Nano-Arduino  Sensa si la temperatura se sobrepaso
+#define INT1 1 //pin(3) en Nano-Arduino
 
 #define MAXIMO_CORRIENTE_BOBINA   200  
 #define MAXIMO_CORRIENTE_RESIST   1000
 
 #define ON  1
 #define OFF 0
-
-#define INT0 0 //pin(2) en Nano-Arduino
-#define INT1 1 //pin(3) en Nano-Arduino
 
 #define ALARMA_FALTA_GAS    0x01
 #define ALARMA_BOBINA_FALLA 0x02
@@ -68,11 +69,18 @@ ISR (TIMER1_COMPA_vect) {
              digitalWrite(SWITCH_ENERGIA_PRINC_LED,!swHV.state);}}
   
   if(DiscountTime>0){DiscountTime--;}
-
-
-
-  
 }//fin de insterrupcion del timer1-----------------------------
+
+/* interrupcion externa INT0 pin-2 en nano-arduino* 
+  recibe la señal del relevador de alarma de temperatura para
+  indicar que la temperatura ambiental paso de su
+  threshold/umbral por lo tanto solo encendemos la
+  regadera no el Boiler */
+void IRQ_INT0_EXTERNA(){
+    AlarmaTemp=0xAA; 
+}//fin de interrupcion externa INT0 PIN2  ++++++++++++++++++++++++++++
+
+
 
 
 void setup() {
@@ -103,29 +111,30 @@ void setup() {
   digitalWrite(POWER_CONTROL_LED,0);//Encender Fuente de Reles
   attachInterrupt(INT0,IRQ_INT0_EXTERNA,RISING); 
 
-  digitalWrite(POWER_CONTROL_LED,1);//Al fin de todo Encender Fuente de Reles
+  //digitalWrite(POWER_CONTROL_LED,1);//Al fin de todo Encender Fuente de Reles
 }//fin setup---------------------------------
 
 void loop() {
+  static int delay2;
+  static unsigned char status;
   switch(estado){
-    case 1:if(Switch_de_Alto_Voltaje(ON,3))estado++;break; //3 segundos
-    case 2:if(Bobina_de_Gas(ON)){DiscountTime=12;estado++;}break;//encender Bobina de Gas
-    case 3:if(!DiscountTime) estado++;break;//delay
-    case 4:if(Monitor_Temperatura_v2())estado++;break;//cuenta el tiempo que tarda en llegar la interrupcion del rele de temp.
-    case 5:if(!(AlarmaStatus&0x07)){Ventilador(ON);}estado++;break;        
-    case 6:if(Resistencia_Regadera(ON))estado++;break;
-    case 7:if(!(AlarmaStatus&0x07)) estado++;else estado=9;break;//NO HAY LA 3 PRIMERAS ALARMAS
-    case 8:if(Monitor_Temperatura2_v2())estado++;break;
-    case 9:break;//estado de Error
+    case 1:delay2=100;
+           if(AlarmaTemp!=0xAA)AlarmaTemp=0;estado++;break;
+    case 2:if(--delay2<3)estado++;break;//para darle oportunidad al Sensor ambiental que active su rele
+    case 3:digitalWrite(POWER_CONTROL_LED,1);//Al fin de todo Encender Fuente de Reles
+    case 4:if(AlarmaTemp==0xAA)estado=10;else{estado++;}break;//muy caliente el Ambiente solo enciende la resistencia de regadera
+    case 5:if(Switch_de_Alto_Voltaje(ON,3))estado++;break; //3 segundos
+    case 6:if(Bobina_de_Gas(ON)){estado++;}break;//encender Bobina de Gas
+    case 7:estado++;break;//delay
+    case 8:if(Monitor_Temperatura_v2(&status))estado++;break;//cuenta el tiempo que tarda en llegar la interrupcion del rele de temp.
+    case 9:if(status==HAY_LLAMA) estado++; break;        
+    case 10:if(Resistencia_Regadera(ON))estado++;break;
+    case 11:if(!(AlarmaStatus&0x07)) estado++;else estado=9;break;//NO HAY LA 3 PRIMERAS ALARMAS
+    case 12:if(Monitor_Temperatura2_v2())estado++;break;
+    case 13:break;//estado de Error
     default:estado=1;break;}//fin de switch loop
 }//fin loop---------------------------------------------------------
 
-/* interrupcion externa INT0 pin-2 en nano-arduino* 
-  recibe la señal del relevador de alarma de temperatura para
-  indicar que el boiler encendio y calienta */
-void IRQ_INT0_EXTERNA(){
-    AlarmaTemp=1; 
-}//fin de interrupcion externa INT0 PIN2  ++++++++++++++++++++++++++++
 
 
 void Ventilador(unsigned char estado){
@@ -153,7 +162,7 @@ unsigned char Lectura_de_Corriente_de_Resist_Reg(void){
 }//fin de leer corriente de ressistencia 
 
 unsigned char Lectura_de_Corriente_de_Bobina_de_Gas(void){
- if(analogRead(SENS_CORRIENTE_BOBINA_IN)<MAXIMO_CORRIENTE_BOBINA){
+ if(analogRead(SENS_CORRIENTE_BOBINA_IN)<MAXIMO_CORRIENTE_RESIST){
          Encender_Alarma(ALARMA_RESIST_REGAD);} 
   }//fin de leeer la corriente de bobina de gas+++++++++++++
 
@@ -196,37 +205,43 @@ return ret;
 
 
 
-/* funcion que  monitorea la interrupcion de alarma de temperatura,
-   activa la interrupcion se desactiva la bobina
-   de gas y se enciende la chipa durante 1 segundo 3 veces,
-   y se enciende la bobina de gas, si no se detecta la interrupcion
+/* funcion que  monitorea la llama de Gas 
+   Sino se detecta LLama 
+   se enciende la chipa durante 1 segundo 3 veces,
+   y se enciende la bobina de gas, si no se detecta la LLAMA
    se enciende la alarma del Falta de Gas, y se apaga la bobina
-   si se detecta la  interrupcion, se sale del subprograma exitosamente*/
-unsigned char Monitor_Temperatura_v2(void){
+   si se detecta la  LLAMA, se sale del subprograma exitosamente*/
+unsigned char Monitor_Temperatura_v2(unsigned char *status){
 unsigned char ret=0;
 static unsigned char estado;
 const unsigned char TIEMPO_DE_ESPERA_SENSOR=12;//3 SEGUNDOS
 const unsigned char TIME_WAIT=4;//tiempo de encendido chispa
 const int UMBRAL_DETECCION_LUMBRE=1000;
+int a,b;
+static int delay1;
    switch(estado){
-     case 1:DiscountTime=TIEMPO_DE_ESPERA_SENSOR;AlarmaTemp=0;
-            estado++;break;
-     case 2:if(analogRead(SENS_OPTICO_DE_LLAMA_IN)>UMBRAL_DETECCION_LUMBRE){estado=20;}
-            else{estado++;}break;
+     case 1:AlarmaTemp=0;estado++;break;
+     case 2:a=analogRead(SENS_OPTICO_DE_LLAMA_IN);
+            b=analogRead(CAL_SENS_OPTICO_IN);
+            if(a>b){estado=20;}else{estado++;}break;
      case 3:DiscountTime=TIME_WAIT;
             vecesEncendido=3;estado++;break;
-     case 4:estado++;break;//encender Bobina de Gas
-     case 5:if(Switch_de_Alto_Voltaje(ON,1))estado++;break;
-     case 6:if(analogRead(SENS_OPTICO_DE_LLAMA_IN)>UMBRAL_DETECCION_LUMBRE){estado=20;}
+     case 4:estado++;break;//encender Bobina Encendida
+     case 5:if(Switch_de_Alto_Voltaje(ON,1)){
+                estado++;delay1=5;}break;
+     case 6:if(delay1==0)estado++;break; //delay de 100mseg
+     case 7:a=analogRead(SENS_OPTICO_DE_LLAMA_IN);
+            b=analogRead(CAL_SENS_OPTICO_IN);
+            if(a>b){estado=20;}
             else{if(DiscountTime==0){
                     if(vecesEncendido>0){vecesEncendido--;
                                    DiscountTime=TIME_WAIT;
                                   estado=5;}
                     else{estado++;}}
-                 else{estado=6;}} 
+                 else{estado=7;}} 
             break;       
-     case 7:Bobina_de_Gas(OFF);estado++;break;
-     case 8:Encender_Alarma(ALARMA_FALTA_GAS);estado=20;break;
+     case 8:Bobina_de_Gas(OFF);estado++;break;
+     case 9:Encender_Alarma(ALARMA_FALTA_GAS);estado=20;break;
      case 20:ret=1;estado++;break;
      default:estado=1;break;}//fin switch++++++++++   
 return ret;  
@@ -239,7 +254,7 @@ return ret;
  esta Funcion Monitorea que no haya sobrevoltaje, que la Bobina
    Funcione y que La temperatura no baje/ que la llama nose apague.*/
 unsigned char Monitor_Temperatura2_v2(void){
-unsigned char ret=0;
+unsigned char ret=0;a
 static unsigned char estado;
 const unsigned char TIEMPO_DE_ESPERA_SENSOR=12;//3 SEGUNDOS
 const unsigned char TIME_WAIT=4;//tiempo de encendido chispa
