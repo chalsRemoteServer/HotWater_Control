@@ -1,4 +1,9 @@
+/*  Si la alarma de Temperatura indica clima caliente
+    Solo va funcionar la regadera electrica
+    Si indica clima Frio va ha funcionar los 2, regadera y boiler
+    si esque no hay alguna alarma de error de hardware.
 
+*/
 /*
 |  CS12  |  CS11  |  CS10  |  Description                       |
 |:-------|:------:|:------:|:----------------------------------:|
@@ -11,7 +16,7 @@
 |   1    |    1   |    0   |  External clock source no T1 pin.  |
 |   1    |    1   |    1   |  External clock source no T1 pin.  |
 */
-#define version "0.1.17"
+#define version "0.1.19"
 #define TIMER1_LED  13
 #define BOBINA_SOLENOIDE_GAS_LED 12//Solenoide que abre la llave de gas
 #define SWITCH_ENERGIA_PRINC_LED 11//switch que activa la chispa alto voltaje para que encienda el gas
@@ -40,6 +45,9 @@
 #define ALARMA_BOBINA_FALLA 0x02
 #define ALARMA_SOBREVOLTAJE 0x04
 #define ALARMA_RESIST_REGAD 0x08
+
+#define HAY_LLAMA 0x33 //indica que hay una llama 
+
 
 
 volatile boolean timer1_out = HIGH;
@@ -114,12 +122,14 @@ void setup() {
   //digitalWrite(POWER_CONTROL_LED,1);//Al fin de todo Encender Fuente de Reles
 }//fin setup---------------------------------
 
+//AlarmaTemp indica que se activo el Rele del Sensor Ambiental que indica que se paso el
+//Umbral de la Temperatura Fria a la Caliente
 void loop() {
   static int delay2;
   static unsigned char status;
   switch(estado){
     case 1:delay2=100;
-           if(AlarmaTemp!=0xAA)AlarmaTemp=0;estado++;break;
+           if(AlarmaTemp!=0xAA)AlarmaTemp=0;estado++;break;//0xAA indica que se activo 
     case 2:if(--delay2<3)estado++;break;//para darle oportunidad al Sensor ambiental que active su rele
     case 3:digitalWrite(POWER_CONTROL_LED,1);//Al fin de todo Encender Fuente de Reles
     case 4:if(AlarmaTemp==0xAA)estado=10;else{estado++;}break;//muy caliente el Ambiente solo enciende la resistencia de regadera
@@ -254,7 +264,7 @@ return ret;
  esta Funcion Monitorea que no haya sobrevoltaje, que la Bobina
    Funcione y que La temperatura no baje/ que la llama nose apague.*/
 unsigned char Monitor_Temperatura2_v2(void){
-unsigned char ret=0;a
+unsigned char ret=0;
 static unsigned char estado;
 const unsigned char TIEMPO_DE_ESPERA_SENSOR=12;//3 SEGUNDOS
 const unsigned char TIME_WAIT=4;//tiempo de encendido chispa
